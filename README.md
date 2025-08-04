@@ -8,9 +8,22 @@ Este algoritmo realiza a previsão de demanda utilizando machine learning com ba
 
 O algoritmo de previsão de demanda funciona em três etapas principais:
 
-1. **Processamento de Dados**: Limpa e transforma dados históricos de vendas
-2. **Treinamento do Modelo**: Utiliza Random Forest/Gradient Boosting para criar modelo preditivo
-3. **Geração de Previsões**: Aplica o modelo para prever demandas futuras
+1. **Processamento de Dados**: Limpa e transforma dados históricos de vendas, incluindo:
+
+   - Limpeza (remoção de valores nulos, tratamento de outliers)
+   - Análise exploratória para identificar padrões e correlações
+   - Engenharia de características (extração de componentes temporais, codificação categórica)
+
+2. **Treinamento do Modelo**: Utiliza machine learning para criar modelo preditivo:
+
+   - Divisão em conjuntos de treino e teste
+   - Seleção do algoritmo (Random Forest ou Gradient Boosting)
+   - Ajuste de hiperparâmetros e avaliação de desempenho
+
+3. **Geração de Previsões**: Aplica o modelo para prever demandas futuras:
+   - Preparação de novos dados para previsão
+   - Aplicação do modelo treinado
+   - Interpretação e formatação dos resultados
 
 ## Variáveis Consideradas
 
@@ -49,13 +62,28 @@ python analise_demanda_completa.py --modo prever --entrada caminho/para/dados_en
 - Requer dados históricos suficientes para treinamento eficaz
 - Necessita retrainamento periódico para manter precisão
 - Sensível a mudanças bruscas no mercado
-  Realiza análise exploratória nos dados para identificar padrões e correlações.
-  """
-  # Calcula estatísticas descritivas
-  # Identifica correlações
-  # Gera visualizações
 
-### 3. Engenharia de Características
+## Detalhes do Algoritmo
+
+### 1. Processamento de Dados
+
+O processamento de dados envolve várias etapas críticas:
+
+- **Limpeza de Dados**: Remoção de entradas duplicadas, preenchimento de valores ausentes e correção de tipos de dados.
+- **Tratamento de Outliers**: Identificação e remoção de valores extremos que podem distorcer a análise.
+- **Análise Exploratória**: Geração de estatísticas descritivas e visualizações para entender a distribuição e relações nos dados.
+
+```python
+def processar_dados(dados):
+    """
+    Processa os dados brutos para torná-los adequados para análise.
+    """
+    # Limpeza de dados
+    # Tratamento de outliers
+    # Análise exploratória
+```
+
+### 2. Engenharia de Características
 
 Com base na análise exploratória, o algoritmo cria características relevantes:
 
@@ -73,7 +101,7 @@ def engenharia_caracteristicas(dados):
     # Normaliza variáveis numéricas
 ```
 
-### 4. Treinamento do Modelo
+### 3. Treinamento do Modelo
 
 O algoritmo treina um modelo preditivo usando os dados preparados:
 
@@ -92,7 +120,7 @@ def treinar_modelo(X_treino, y_treino):
     # Avalia o desempenho
 ```
 
-### 5. Avaliação do Modelo
+### 4. Avaliação do Modelo
 
 O algoritmo avalia a qualidade do modelo usando:
 
@@ -110,7 +138,7 @@ def avaliar_modelo(modelo, X_teste, y_teste):
     # Visualiza resultados
 ```
 
-### 6. Persistência do Modelo
+### 5. Persistência do Modelo
 
 O modelo treinado é salvo em disco para uso futuro:
 
@@ -123,7 +151,7 @@ def salvar_modelo(modelo, caminho):
     # Salva informações sobre as colunas e transformações
 ```
 
-### 7. Interface de Previsão
+### 6. Interface de Previsão
 
 O algoritmo fornece funções para fazer novas previsões:
 
