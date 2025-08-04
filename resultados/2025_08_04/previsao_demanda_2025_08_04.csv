@@ -1,0 +1,4 @@
+categoria,preco_unitario,promocao,temperatura_media,humidade_media,dia_da_semana,feedback_cliente,data,mes,demanda_prevista
+Eletrônicos,450.0,Sim,29.0,60.0,Sexta,5,2025-08-04,8,10
+Roupas,89.9,Não,22.0,75.0,Sábado,4,2025-08-04,8,2
+Utensílios,35.5,Não,28.0,62.0,Sexta,3,2025-08-04,8,14
