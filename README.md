@@ -1,54 +1,61 @@
-# Documentação do Algoritmo de Análise de Demanda
+# Algoritmo de Análise de Demanda
 
 ## Visão Geral
 
-O algoritmo de análise de demanda implementado no arquivo `analise_demanda_completa.py` é um sistema de previsão de demanda baseado em machine learning. Ele utiliza dados históricos de vendas e fatores contextuais para prever a quantidade de produtos que serão demandados no futuro.
+Este algoritmo realiza a previsão de demanda utilizando machine learning com base em dados históricos de vendas e fatores contextuais.
 
-## Arquitetura do Sistema
+## Como Funciona
 
-O sistema é composto por três componentes principais:
+O algoritmo de previsão de demanda funciona em três etapas principais:
 
-1. **Processamento de Dados**: Limpeza, transformação e preparação dos dados históricos
-2. **Treinamento de Modelo**: Utilização de algoritmos de aprendizagem para criar um modelo preditivo
-3. **Interface de Previsão**: Mecanismo para fazer novas previsões com base no modelo treinado
+1. **Processamento de Dados**: Limpa e transforma dados históricos de vendas
+2. **Treinamento do Modelo**: Utiliza Random Forest/Gradient Boosting para criar modelo preditivo
+3. **Geração de Previsões**: Aplica o modelo para prever demandas futuras
 
-## Fluxo de Funcionamento
+## Variáveis Consideradas
 
-### 1. Carregamento e Preparação de Dados
+- Data (para capturar tendências e sazonalidades)
+- Categoria do Produto
+- Preço Unitário
+- Status de Promoção
+- Fatores ambientais (temperatura, umidade)
+- Dia da Semana
+- Feedback do Cliente
 
-O algoritmo inicia carregando dados históricos de vendas de arquivos externos (CSV, Excel, etc.). Estes dados passam por um processo de:
+## Como Executar
 
-- Limpeza (remoção de valores nulos, tratamento de outliers)
-- Transformação (conversão de datas, normalização de valores)
-- Engenharia de características (criação de novas variáveis relevantes)
+### Instalação
 
-```python
-def carregar_dados(caminho_arquivo):
-    """
-    Carrega os dados do arquivo especificado e realiza a limpeza inicial.
-    """
-    # Carrega os dados do arquivo
-    # Realiza limpeza e transformações básicas
-    # Retorna DataFrame preparado
+```bash
+# Instalar dependências
+pip install -r requirements.txt
 ```
 
-### 2. Análise Exploratória
+### Execução
 
-O algoritmo realiza uma análise exploratória para entender relações entre variáveis:
+```bash
+# Modo padrão
+python analise_demanda_completa.py
 
-- Correlações entre variáveis e demanda
-- Padrões sazonais nas vendas
-- Impacto de promoções e outros fatores externos
+# Modo de treinamento com dados específicos
+python analise_demanda_completa.py --modo treinar --dados caminho/para/dados.csv
 
-```python
-def analise_exploratoria(dados):
-    """
-    Realiza análise exploratória nos dados para identificar padrões e correlações.
-    """
-    # Calcula estatísticas descritivas
-    # Identifica correlações
-    # Gera visualizações
+# Modo de previsão com novos dados
+python analise_demanda_completa.py --modo prever --entrada caminho/para/dados_entrada.csv
 ```
+
+## Limitações
+
+- Requer dados históricos suficientes para treinamento eficaz
+- Necessita retrainamento periódico para manter precisão
+- Sensível a mudanças bruscas no mercado
+  Realiza análise exploratória nos dados para identificar padrões e correlações.
+  """
+  # Calcula estatísticas descritivas
+  # Identifica correlações
+  # Gera visualizações
+
+````
 
 ### 3. Engenharia de Características
 
@@ -66,7 +73,7 @@ def engenharia_caracteristicas(dados):
     # Extrai informações temporais
     # Aplica codificação para variáveis categóricas
     # Normaliza variáveis numéricas
-```
+````
 
 ### 4. Treinamento do Modelo
 
