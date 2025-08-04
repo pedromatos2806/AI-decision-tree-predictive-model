@@ -55,8 +55,6 @@ python analise_demanda_completa.py --modo prever --entrada caminho/para/dados_en
   # Identifica correlações
   # Gera visualizações
 
-````
-
 ### 3. Engenharia de Características
 
 Com base na análise exploratória, o algoritmo cria características relevantes:
@@ -73,7 +71,7 @@ def engenharia_caracteristicas(dados):
     # Extrai informações temporais
     # Aplica codificação para variáveis categóricas
     # Normaliza variáveis numéricas
-````
+```
 
 ### 4. Treinamento do Modelo
 
