@@ -2,11 +2,11 @@
 
 ## Visão Geral
 
-Este algoritmo realiza a previsão de demanda utilizando machine learning com base em dados históricos de vendas e fatores contextuais.
+Este algoritmo realiza a previsão de demanda utilizando machine learning com base em dados históricos de vendas e fatores contextuais, recomendando quais produtos devem ser comprados.
 
 ## Como Funciona
 
-O algoritmo de previsão de demanda funciona em três etapas principais:
+O algoritmo de previsão de demanda funciona em quatro etapas principais:
 
 1. **Processamento de Dados**: Limpa e transforma dados históricos de vendas, incluindo:
 
@@ -21,9 +21,14 @@ O algoritmo de previsão de demanda funciona em três etapas principais:
    - Ajuste de hiperparâmetros e avaliação de desempenho
 
 3. **Geração de Previsões**: Aplica o modelo para prever demandas futuras:
-   - Preparação de novos dados para previsão
+   - Preparação dos dados existentes para previsão
    - Aplicação do modelo treinado
    - Interpretação e formatação dos resultados
+
+4. **Recomendação de Produtos**: Analisa os produtos existentes e recomenda quais comprar:
+   - Comparação da demanda prevista com a média histórica
+   - Classificação de produtos por prioridade de compra
+   - Visualização gráfica das recomendações
 
 ## Variáveis Consideradas
 
@@ -47,14 +52,11 @@ pip install -r requirements.txt
 ### Execução
 
 ```bash
-# Modo padrão
-python analise_demanda_completa.py
+# Modo padrão (treinamento e recomendação)
+python main.py
 
 # Modo de treinamento com dados específicos
-python analise_demanda_completa.py --modo treinar --dados caminho/para/dados.csv
-
-# Modo de previsão com novos dados
-python analise_demanda_completa.py --modo prever --entrada caminho/para/dados_entrada.csv
+python main.py --dados caminho/para/dados.csv
 ```
 
 ## Limitações
@@ -74,13 +76,18 @@ O processamento de dados envolve várias etapas críticas:
 - **Análise Exploratória**: Geração de estatísticas descritivas e visualizações para entender a distribuição e relações nos dados.
 
 ```python
-def processar_dados(dados):
-    """
-    Processa os dados brutos para torná-los adequados para análise.
-    """
-    # Limpeza de dados
-    # Tratamento de outliers
-    # Análise exploratória
+def carregar_e_processar_dados(caminho_dados, delimiter=','):
+    """Carrega e processa os dados para treinamento."""
+    print("\n1. Carregando e pré-processando os dados...")
+    data_loader = DataLoader(file_path=caminho_dados, delimiter=delimiter)
+    
+    # Carregar dados com validação de colunas
+    data = data_loader.load_data(required_columns=[...])
+    
+    # Pré-processar dados
+    X_train, X_test, y_train, y_test, product_ids_test = data_loader.preprocess_data()
+    
+    return {...}
 ```
 
 ### 2. Engenharia de Características
@@ -91,33 +98,27 @@ Com base na análise exploratória, o algoritmo cria características relevantes
 - Codificação one-hot para variáveis categóricas
 - Normalização de variáveis numéricas
 
-```python
-def engenharia_caracteristicas(dados):
-    """
-    Cria e transforma características para melhorar o desempenho do modelo.
-    """
-    # Extrai informações temporais
-    # Aplica codificação para variáveis categóricas
-    # Normaliza variáveis numéricas
-```
-
 ### 3. Treinamento do Modelo
 
 O algoritmo treina um modelo preditivo usando os dados preparados:
 
 - Divisão em conjuntos de treino e teste
-- Seleção do algoritmo de aprendizado (geralmente Random Forest ou Gradient Boosting)
+- Seleção do algoritmo (Random Forest por padrão)
 - Ajuste de hiperparâmetros para otimizar o desempenho
 
 ```python
-def treinar_modelo(X_treino, y_treino):
-    """
-    Treina o modelo de previsão de demanda usando os dados fornecidos.
-    """
-    # Instancia o modelo (ex: Random Forest)
-    # Ajusta hiperparâmetros
-    # Treina o modelo com os dados
-    # Avalia o desempenho
+def treinar_modelo(dados_processados, model_type="random_forest"):
+    """Treina o modelo de previsão de demanda."""
+    print("\n2. Construindo e treinando o modelo...")
+    model_builder = ModelBuilder(model_type=model_type, max_depth=10, random_state=42)
+    
+    model = model_builder.train(
+        dados_processados['X_train'], 
+        dados_processados['y_train'], 
+        dados_processados['feature_names']
+    )
+    
+    return {...}
 ```
 
 ### 4. Avaliação do Modelo
@@ -125,45 +126,49 @@ def treinar_modelo(X_treino, y_treino):
 O algoritmo avalia a qualidade do modelo usando:
 
 - Métricas de erro (MAE, RMSE)
-- Validação cruzada
+- Coeficiente de determinação (R²)
 - Análise de resíduos
 
-```python
-def avaliar_modelo(modelo, X_teste, y_teste):
-    """
-    Avalia o desempenho do modelo usando métricas relevantes.
-    """
-    # Faz previsões no conjunto de teste
-    # Calcula métricas de erro
-    # Visualiza resultados
-```
+### 5. Recomendação de Produtos
 
-### 5. Persistência do Modelo
-
-O modelo treinado é salvo em disco para uso futuro:
+O algoritmo analisa os produtos existentes e recomenda quais devem ser comprados:
 
 ```python
-def salvar_modelo(modelo, caminho):
-    """
-    Salva o modelo treinado e metadados relevantes em disco.
-    """
-    # Salva o modelo usando joblib ou pickle
-    # Salva informações sobre as colunas e transformações
+def recomendar_produtos():
+    """Recomenda produtos para compra com base nas previsões de demanda."""
+    print("\n6. Analisando produtos existentes para recomendações de compra...")
+    
+    # Carregar modelo treinado
+    model = joblib.load('modelos/modelo_demanda.pkl')
+    
+    # Carregar e analisar dados históricos
+    dados = pd.read_csv('dados/2025.1 - Vendas_semestre.txt', sep=',')
+    
+    # Agrupar dados por produto
+    produtos_dados = dados.groupby('produto_id').agg({...})
+    
+    # Obter as últimas tendências para cada produto
+    tendencias = dados.sort_values('data').groupby('produto_id').tail(5)
+    
+    # Fazer previsão para cada produto
+    previsoes = model.predict(X_pred)
+    
+    # Classificar produtos por prioridade
+    resultados['recomendacao'] = 'Normal'
+    resultados.loc[resultados['demanda_prevista'] > resultados['venda_media'] * 1.2, 'recomendacao'] = 'Alta'
+    resultados.loc[resultados['demanda_prevista'] < resultados['venda_media'] * 0.8, 'recomendacao'] = 'Baixa'
+    
+    return resultados
 ```
 
-### 6. Interface de Previsão
+### 6. Visualizações
 
-O algoritmo fornece funções para fazer novas previsões:
+O algoritmo gera visualizações para facilitar a interpretação:
 
-```python
-def fazer_previsao(dados_novos, modelo_carregado):
-    """
-    Realiza previsões para novos dados usando o modelo treinado.
-    """
-    # Prepara os novos dados (mesmas transformações aplicadas no treinamento)
-    # Faz a previsão usando o modelo carregado
-    # Retorna os resultados formatados
-```
+- Importância das features no modelo
+- Comparação entre valores reais e previstos
+- Distribuição dos erros
+- Recomendações de produtos para compra
 
 ## Variáveis Utilizadas
 
@@ -177,27 +182,6 @@ O modelo considera as seguintes variáveis para fazer previsões:
 - **Umidade Média**: Nível de umidade do ambiente
 - **Dia da Semana**: Para capturar padrões semanais de consumo
 - **Feedback do Cliente**: Nível de satisfação do cliente
-
-## Como Usar o Sistema
-
-### Preparação do Ambiente
-
-```bash
-# Instalar dependências
-pip install pandas numpy scikit-learn matplotlib joblib
-```
-
-### Treinamento do Modelo
-
-```bash
-python analise_demanda_completa.py --modo treinar --dados caminho/para/dados.csv
-```
-
-### Realizar Previsões
-
-```bash
-python analise_demanda_completa.py --modo prever --entrada caminho/para/dados_entrada.csv
-```
 
 ## Personalização
 
@@ -221,4 +205,4 @@ O algoritmo pode ser personalizado de várias maneiras:
 
 ## Conclusão
 
-O algoritmo de análise de demanda fornece uma ferramenta poderosa para prever necessidades futuras de estoque e vendas. Ao combinar técnicas de machine learning com dados históricos e variáveis contextuais, ele permite decisões mais informadas sobre gerenciamento de inventário e planejamento de negócios.
+O algoritmo de análise de demanda fornece uma ferramenta poderosa para prever necessidades futuras de estoque e vendas. Em vez de gerar produtos fictícios, ele analisa o histórico de produtos existentes para recomendar quais devem ser comprados, permitindo decisões mais informadas sobre gerenciamento de inventário e planejamento de negócios.

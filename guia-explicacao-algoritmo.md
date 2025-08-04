@@ -4,7 +4,7 @@
 
 Prezado professor,
 
-Este guia explica passo a passo o funcionamento do algoritmo de previsão de demanda desenvolvido para o sistema ShopFast. O algoritmo utiliza técnicas de aprendizado de máquina para prever a quantidade de produtos que serão vendidos com base em diversos fatores contextuais.
+Este guia explica passo a passo o funcionamento do algoritmo de previsão de demanda desenvolvido para o sistema ShopFast. O algoritmo utiliza técnicas de aprendizado de máquina para prever a quantidade de produtos que serão vendidos e recomendar quais produtos devem ser comprados com base em diversos fatores contextuais.
 
 ## Estrutura do Projeto
 
@@ -15,24 +15,29 @@ IA/
 ├── src/
 │   └── shopfast/
 │       ├── data_loader.py       # Carregamento e limpeza de dados
-│       ├── data_preprocessor.py # Pré-processamento e engenharia de features
-│       ├── demand_model.py      # Modelo de predição de demanda
-│       └── predictor.py         # Interface para novas previsões
-├── main.py                      # Script principal para treinamento
-├── fazer_previsao.py            # Interface para previsões pontuais
-├── prever_tudo.py               # Previsão para dataset completo
-└── analise_demanda_completa.py  # Análise completa de demanda
+│       ├── model_builder.py     # Construção e treinamento do modelo
+│       ├── model_evaluator.py   # Avaliação de desempenho do modelo
+│       └── visualization.py     # Visualização dos resultados
+├── main.py                      # Script principal de execução
+├── dados/                       # Diretório para arquivos de dados
+│   └── 2025.1 - Vendas_semestre.txt  # Dados históricos de vendas
+├── resultados/                  # Diretório para resultados e visualizações
+│   └── [data]/
+│       ├── previsoes_demanda.csv   # Resultados das previsões
+│       └── graficos/               # Visualizações geradas
+└── modelos/                     # Modelos salvos para uso futuro
 ```
 
 ## Fluxo do Algoritmo
 
-O algoritmo segue um fluxo em cinco etapas principais:
+O algoritmo segue um fluxo em seis etapas principais:
 
 1. **Carregamento dos Dados**
 2. **Pré-processamento**
 3. **Treinamento do Modelo**
 4. **Avaliação do Desempenho**
-5. **Realização de Previsões**
+5. **Geração de Visualizações**
+6. **Recomendação de Produtos**
 
 Vamos explorar cada uma destas etapas em detalhes.
 
@@ -43,226 +48,263 @@ Vamos explorar cada uma destas etapas em detalhes.
 O carregamento de dados é gerenciado pela classe `DataLoader`, que:
 
 - Lê arquivos CSV ou TXT com dados históricos de vendas
-- Realiza limpeza básica (remoção de valores nulos, correção de tipos)
-- Prepara os dados para o pré-processamento
+- Identifica e corrige problemas de formato (delimitadores, codificação)
+- Remove linhas com datas inválidas ou incompletas
+- Valida a presença das colunas necessárias
 
 **Código-chave:**
 
 ```python
-class DataLoader:
-    def load_and_clean_data(self):
-        # Carrega o arquivo de dados
-        df = pd.read_csv(self.file_path, delimiter=self.delimiter)
-
-        # Limpa nomes das colunas
-        df.columns = df.columns.str.strip()
-
-        # Remove linhas com valores ausentes
-        df.dropna(inplace=True)
-
-        return df
+def load_data(self, required_columns=None, encoding='utf-8'):
+    """Carrega os dados do arquivo."""
+    # Tentar diferentes codificações se necessário
+    encodings = [encoding, 'latin1', 'ISO-8859-1', 'cp1252']
+    
+    for enc in encodings:
+        try:
+            # Carregar o arquivo com tratamento de linhas problemáticas
+            self.data = pd.read_csv(
+                self.file_path, 
+                sep=self.delimiter,
+                encoding=enc,
+                on_bad_lines='skip'
+            )
+            print(f"Dados carregados com sucesso usando codificação {enc}.")
+            break
+        except UnicodeDecodeError:
+            print(f"Erro de codificação com {enc}, tentando próxima...")
+            
+    # Remover linhas com datas inválidas
+    if 'data' in self.data.columns:
+        # Filtrar linhas com formato de data correto
+        import re
+        date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+        mask = self.data['data'].astype(str).apply(lambda x: bool(date_pattern.match(x)))
+        
+        self.data = self.data[mask]
 ```
 
 ## 2. Pré-processamento dos Dados
 
-### Módulo: `data_preprocessor.py`
+### Módulo: `data_loader.py`
 
-O pré-processamento é realizado pela classe `DataPreprocessor`, que:
+O pré-processamento é realizado dentro da classe `DataLoader`, método `preprocess_data`, que:
 
-- Extrai características temporais (como mês) a partir da data
-- Aplica codificação one-hot para variáveis categóricas
+- Converte a coluna de data para formato datetime
+- Extrai características temporais (mês, dia)
+- Converte variáveis categóricas em formato numérico
 - Divide os dados em conjuntos de treinamento e teste
+- Padroniza as variáveis numéricas
 
 **Código-chave:**
 
 ```python
-class DataPreprocessor:
-    def preprocess(self, feature_cols, target_col):
-        # Extrai o mês da data
-        self.df['data'] = pd.to_datetime(self.df['data'])
-        self.df['mes'] = self.df['data'].dt.month
-
-        # Seleciona as features e o alvo
-        X = self.df[feature_cols]
-        y = self.df[target_col]
-
-        # Aplica one-hot encoding
-        X_encoded = pd.get_dummies(X, columns=['categoria', 'promocao', 'dia_da_semana'],
-                                  drop_first=True)
-
-        # Salva a ordem das colunas para uso posterior
-        self.encoder_columns = X_encoded.columns
-
-        return X_encoded, y
+def preprocess_data(self, target_column='quantidade_vendida', test_size=0.2, random_state=42):
+    """Prepara os dados para treinamento e teste."""
+    # Converter data para timestamp
+    self.data['data'] = pd.to_datetime(self.data['data'], errors='coerce')
+    
+    # Extrair características de data
+    self.data['mes'] = self.data['data'].dt.month
+    self.data['dia'] = self.data['data'].dt.day
+    
+    # Converter 'promocao' para binário
+    self.data['promocao'] = self.data['promocao'].apply(
+        lambda x: 1 if x in ['Sim', 's', 'yes', 'y', '1', 'true'] else 0
+    )
+    
+    # Divisão dos dados
+    self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state
+    )
 ```
 
 ## 3. Treinamento do Modelo
 
-### Módulo: `demand_model.py`
+### Módulo: `model_builder.py`
 
-O treinamento do modelo é gerenciado pela classe `DemandPredictionModel`, que:
+O treinamento do modelo é gerenciado pela classe `ModelBuilder`, que:
 
-- Inicializa um modelo de Árvore de Decisão para regressão
-- Treina o modelo com os dados de treinamento
-- Ajusta hiperparâmetros como profundidade máxima da árvore
+- Suporta diferentes tipos de modelos (Decision Tree, Random Forest, Gradient Boosting)
+- Treina o modelo com os dados processados
+- Calcula e armazena a importância das features
 
 **Código-chave:**
 
 ```python
-class DemandPredictionModel:
-    def __init__(self, max_depth=10, random_state=42):
-        # Inicializa o modelo de Árvore de Decisão
-        self.model = DecisionTreeRegressor(max_depth=max_depth, random_state=random_state)
-
-    def train(self, X_train, y_train):
-        # Treina o modelo com os dados
-        self.model.fit(X_train, y_train)
+def train(self, X_train, y_train, feature_names=None):
+    """Treina o modelo de previsão de demanda."""
+    print(f"Treinando o modelo de {type(self.model).__name__}...")
+    
+    self.model.fit(X_train, y_train)
+    print("Modelo treinado com sucesso.")
+    
+    # Calcular importância das features
+    if hasattr(self.model, 'feature_importances_'):
+        self.feature_importance = pd.DataFrame({
+            'Feature': feature_names,
+            'Importance': self.model.feature_importances_
+        }).sort_values('Importance', ascending=False)
 ```
 
-### Escolha do Modelo: Árvore de Decisão
+### Escolha do Modelo: Random Forest
 
-Por que escolhemos uma Árvore de Decisão para este problema?
+Por que utilizamos Random Forest como modelo padrão:
 
-1. **Interpretabilidade**: É possível visualizar as regras de decisão
-2. **Capacidade de lidar com relações não-lineares** entre variáveis
-3. **Baixa sensibilidade a outliers** nos dados
-4. **Capacidade de capturar interações** entre diferentes variáveis
+1. **Alta precisão**: Combina múltiplas árvores de decisão para melhorar a acurácia
+2. **Robustez contra overfitting**: A combinação de múltiplos modelos reduz o risco de sobreajuste
+3. **Capacidade de lidar com dados não-lineares**: Captura relações complexas entre variáveis
+4. **Avaliação automática da importância das features**: Identifica quais variáveis mais impactam a previsão
 
 ## 4. Avaliação do Modelo
 
-### Módulo: `demand_model.py`
+### Módulo: `model_evaluator.py`
 
-A avaliação do modelo é feita através de:
+A avaliação do modelo é feita através da classe `ModelEvaluator`, que:
 
-- Coeficiente de Determinação (R²): Mede quanto da variação da demanda o modelo consegue explicar
-- Erro Médio Absoluto (MAE): Mede o erro médio em unidades de produtos
+- Calcula múltiplas métricas de desempenho (R², MAE, RMSE, MAPE)
+- Compara resultados reais com previstos
+- Gera um DataFrame com os resultados das previsões para cada produto
 
 **Código-chave:**
 
 ```python
-def evaluate(self, X_test, y_test):
-    # Faz previsões no conjunto de teste
-    y_pred = self.model.predict(X_test)
-
-    # Calcula métricas de avaliação
+def evaluate(self, model, X_test, y_test, product_ids=None):
+    """Avalia o modelo e retorna métricas de desempenho."""
+    # Fazer previsões
+    y_pred = model.predict(X_test)
+    
+    # Calcular métricas
     r2 = r2_score(y_test, y_pred)
     mae = mean_absolute_error(y_test, y_pred)
-
-    # Exibe resultados
-    print(f"Coeficiente de Determinação (R²): {r2:.2f}")
-    print(f"Erro Médio Absoluto (MAE): {mae:.2f} unidades")
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    mape = np.mean(np.abs((y_test - y_pred) / np.maximum(1, y_test))) * 100
+    
+    # Criar DataFrame com resultados por produto
+    prediction_df = pd.DataFrame({
+        'produto_id': product_ids,
+        'demanda_real': y_test,
+        'demanda_prevista': np.round(y_pred, 0).astype(int)
+    })
 ```
 
-## 5. Realização de Previsões
+## 5. Visualização dos Resultados
 
-### Módulo: `predictor.py`
+### Módulo: `visualization.py`
 
-A classe `Predictor` é responsável por:
+A classe `ModelVisualizer` gera visualizações para interpretar os resultados:
 
-- Receber novos dados para previsão
-- Aplicar as mesmas transformações usadas no treinamento
-- Fazer previsões usando o modelo treinado
+- Gráfico de importância das features
+- Gráfico de dispersão de valores reais vs. previstos
+- Gráfico de barras comparando demanda real e prevista
+- Gráfico de distribuição dos erros
+
+## 6. Recomendação de Produtos
+
+### Módulo: `main.py` (função `recomendar_produtos`)
+
+Esta é uma nova funcionalidade que analisa os produtos existentes e recomenda quais devem ser comprados:
+
+- Carrega o modelo treinado
+- Analisa o histórico de vendas de cada produto
+- Calcula estatísticas por produto (média, total, etc.)
+- Obtém as tendências mais recentes
+- Faz previsões para cada produto
+- Classifica os produtos em prioridades de compra:
+  - **Alta**: Quando a demanda prevista é 20% maior que a média histórica
+  - **Normal**: Quando a demanda prevista está próxima da média histórica
+  - **Baixa**: Quando a demanda prevista é 20% menor que a média histórica
 
 **Código-chave:**
 
 ```python
-class Predictor:
-    def predict_demand(self, new_sale_data):
-        # Cria um DataFrame a partir dos novos dados
-        new_sale_df = pd.DataFrame(new_sale_data, index=[0])
-
-        # Extrai o mês da data
-        if 'mes' not in new_sale_df.columns and 'data' in new_sale_df.columns:
-            new_sale_df['mes'] = pd.to_datetime(new_sale_df['data']).dt.month
-
-        # Aplica one-hot encoding nas colunas categóricas
-        if 'categoria' in new_sale_df.columns:
-            new_sale_df = pd.get_dummies(new_sale_df, columns=['categoria'])
-
-        # Garante que as colunas correspondam ao modelo treinado
-        for col in self.columns:
-            if col not in new_sale_df.columns:
-                new_sale_df[col] = 0
-
-        # Faz a previsão
-        prediction = self.model.predict(new_sale_df)
-        return int(max(0, prediction[0]))
+def recomendar_produtos():
+    """Recomenda produtos para compra com base nas previsões de demanda."""
+    # Agrupar dados por produto para análise
+    produtos_dados = dados.groupby('produto_id').agg({
+        'categoria': 'first',  # Pegar a primeira categoria
+        'quantidade_vendida': ['mean', 'sum', 'count'],  # Estatísticas de vendas
+        'preco_unitario': 'mean',  # Preço médio
+        'promocao': 'mean',  # Percentual de dias com promoção
+        'temperatura_media': 'mean',
+        'humidade_media': 'mean',
+        'feedback_cliente': 'mean',
+    }).reset_index()
+    
+    # Classificar produtos para recomendação
+    resultados['recomendacao'] = 'Normal'
+    resultados.loc[resultados['demanda_prevista'] > resultados['venda_media'] * 1.2, 'recomendacao'] = 'Alta'
+    resultados.loc[resultados['demanda_prevista'] < resultados['venda_media'] * 0.8, 'recomendacao'] = 'Baixa'
 ```
+
+O gráfico de recomendação gerado mostra:
+- Os 15 produtos com maior demanda prevista
+- A média histórica de vendas para comparação
+- Cores diferentes para os níveis de prioridade (Alta, Normal, Baixa)
 
 ## Variáveis Utilizadas no Modelo
 
 O modelo considera as seguintes variáveis para prever a demanda:
 
 1. **Preço unitário**: Quanto custa o produto
-2. **Temperatura média**: Temperatura do dia (influencia vendas de certos produtos)
+2. **Temperatura média**: Temperatura do dia
 3. **Umidade média**: Nível de umidade do ambiente
 4. **Feedback do cliente**: Avaliação do cliente sobre o produto
-5. **Mês**: Captura sazonalidade anual
+5. **Mês e dia**: Captura sazonalidade
 6. **Categoria do produto**: Tipo de produto (Eletrônicos, Roupas, etc.)
 7. **Promoção**: Se o produto estava em promoção ou não
 8. **Dia da semana**: Captura padrões semanais de consumo
 
 ## Fluxo de Execução
 
-### Treinamento (main.py)
+### Execução completa (main.py)
 
-1. Carrega os dados históricos de vendas
-2. Realiza o pré-processamento
-3. Treina o modelo de Árvore de Decisão
+1. Configura pastas para armazenar resultados
+2. Carrega e processa os dados históricos de vendas
+3. Treina o modelo de previsão (Random Forest)
 4. Avalia o desempenho do modelo
-5. Salva o modelo treinado para uso futuro
-
-### Previsão (fazer_previsao.py)
-
-1. Carrega o modelo treinado
-2. Recebe novos dados para previsão
-3. Aplica as mesmas transformações do treinamento
-4. Realiza a previsão
-5. Retorna a quantidade prevista de vendas
+5. Gera visualizações dos resultados
+6. Salva o modelo treinado
+7. Analisa produtos existentes e faz recomendações de compra
+8. Gera visualizações das recomendações
 
 ## Demonstração Prática
 
-Para demonstrar o funcionamento do algoritmo, podemos:
+Para demonstrar o funcionamento do algoritmo, execute:
 
-1. **Mostrar o treinamento do modelo**:
+```
+python main.py
+```
 
-   ```
-   python main.py
-   ```
-
-2. **Fazer previsões para novos produtos**:
-
-   ```
-   python fazer_previsao.py
-   ```
-
-3. **Analisar o dataset completo**:
-   ```
-   python analise_demanda_completa.py
-   ```
+Este comando realizará todas as etapas do algoritmo e gerará:
+1. Arquivos de resultados na pasta 'resultados/[data_atual]/'
+2. Gráficos na pasta 'resultados/[data_atual]/graficos/'
+3. Modelo salvo na pasta 'modelos/'
 
 ## Resultados e Visualizações
 
-O sistema gera visualizações para facilitar a interpretação dos resultados:
+O sistema gera as seguintes visualizações:
 
-1. **Gráficos de barras** mostrando a demanda prevista por categoria
-2. **Gráficos de linhas** comparando a demanda real vs. prevista ao longo do tempo
-3. **Tabelas CSV** com os resultados detalhados das previsões
+1. **Importância das features**: Mostra quais variáveis mais influenciam a previsão
+2. **Valores reais vs. previstos**: Compara os valores reais e previstos
+3. **Distribuição dos erros**: Analisa os erros de previsão
+4. **Recomendação de produtos**: Mostra os produtos recomendados para compra
 
 ## Pontos Fortes do Algoritmo
 
-1. **Modularidade**: Código organizado em componentes reutilizáveis
-2. **Tratamento robusto de dados**: Lida com valores ausentes e transformações
-3. **Interpretabilidade**: Usa um modelo que permite entender as decisões
-4. **Flexibilidade**: Pode ser estendido para incluir novas variáveis
+1. **Robustez**: Trata problemas de formatação e dados incompletos
+2. **Modularidade**: Código organizado em componentes independentes
+3. **Flexibilidade**: Suporta diferentes tipos de modelos
+4. **Orientação a negócios**: Além de prever, recomenda ações concretas (quais produtos comprar)
+5. **Visualizações claras**: Facilita a interpretação dos resultados
 
 ## Limitações e Melhorias Futuras
 
-1. **Exploração de outros algoritmos**: Testar Random Forest ou Gradient Boosting
-2. **Otimização de hiperparâmetros**: Usar validação cruzada para melhorar o ajuste
-3. **Inclusão de mais variáveis**: Como tendências de mercado ou fatores econômicos
-4. **Implementação de técnicas de séries temporais**: Para capturar melhor padrões temporais
+1. **Exploração de técnicas de séries temporais**: Para capturar melhor padrões temporais
+2. **Segmentação de produtos**: Tratar diferentes categorias com modelos específicos
+3. **Otimização de hiperparâmetros**: Implementar busca em grade para melhorar a precisão
+4. **Análise de fatores externos**: Incorporar eventos sazonais, feriados e tendências de mercado
 
 ## Conclusão
 
-O algoritmo de previsão de demanda implementado consegue capturar relações complexas entre diversas variáveis para prever com precisão razoável a quantidade de produtos que serão vendidos. A abordagem modular e flexível permite que o sistema seja facilmente adaptado e melhorado conforme necessário.
+O algoritmo de previsão de demanda implementado vai além da simples previsão de quantidades: ele analisa o histórico de vendas para recomendar quais produtos devem ser comprados, classificando-os por prioridade. Esta abordagem orientada a decisões facilita o planejamento de estoque e compras, permitindo que o negócio otimize seus recursos.
