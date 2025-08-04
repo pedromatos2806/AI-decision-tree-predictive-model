@@ -4,7 +4,7 @@ Análise de Demanda Completa - ShopFast
 Este script realiza um fluxo completo de análise de demanda:
 1. Carrega o modelo treinado
 2. Realiza previsões para produtos específicos usando a data atual
-3. Gera visualizações da previsão de demanda
+3. Gera visualizações da previsão de demanda por produto
 4. Analisa o dataset histórico completo
 5. Salva os resultados em arquivos CSV
 """
@@ -54,66 +54,97 @@ def carregar_modelo():
     try:
         model = joblib.load('modelo_demanda.pkl')
         model_columns = joblib.load('colunas_modelo.pkl')
+        preprocessor = None
+        
+        # Tenta carregar o preprocessador se existir
+        try:
+            preprocessor = joblib.load('preprocessor_modelo.pkl')
+            print("Preprocessador 'preprocessor_modelo.pkl' carregado com sucesso.")
+        except FileNotFoundError:
+            print("Preprocessador não encontrado. Usando processamento padrão.")
+            
         print("Modelo 'modelo_demanda.pkl' carregado com sucesso.")
-        return model, model_columns
+        return model, model_columns, preprocessor
     except FileNotFoundError:
         print("ERRO: Arquivos de modelo não encontrados.")
         print("Rode o script 'main.py' primeiro para treinar e salvar o modelo.")
-        return None, None
+        return None, None, None
 
 
-def prever_novos_produtos(model, model_columns, produtos):
+def prever_novos_produtos(model, model_columns, produtos, preprocessor=None):
     """Faz previsões para novos produtos com a data atual."""
     if model is None or model_columns is None:
-        return None
+        return None, None
     
     # Aplica a data atual em todas as entradas
     data_atual = datetime.datetime.now().strftime('%Y-%m-%d')
     for produto in produtos:
         produto['data'] = data_atual
+        
+        # Garantir que cada produto tenha um identificador único
+        if 'id_produto' not in produto and 'nome_produto' not in produto:
+            produto['id_produto'] = f"PROD_{hash(str(produto)) % 10000}"
+    
+    # Importar o Predictor
+    from src.shopfast.predictor import Predictor
+    
+    # Cria o preditor e faz as previsões
+    predictor = Predictor(model, model_columns, preprocessor)
     
     # Converte os dados para um DataFrame
     df_produtos = pd.DataFrame(produtos)
     
-    # Adiciona a coluna 'mes' a partir da data
-    df_produtos['mes'] = pd.to_datetime(df_produtos['data']).dt.month
-    
-    # Aplica o one-hot encoding
-    df_encoded = pd.get_dummies(df_produtos)
-    
-    # Reorganiza as colunas para o modelo
-    df_final = df_encoded.reindex(columns=model_columns, fill_value=False)
-    
     # Faz a previsão
-    previsoes = model.predict(df_final)
+    previsoes = predictor.predict_demand(df_produtos)
     
-    # Adiciona as previsões ao DataFrame
-    df_produtos['demanda_prevista'] = previsoes.astype(int)
-    
+    # Se o retorno for uma lista, adiciona ao DataFrame
+    if isinstance(previsoes, list):
+        df_produtos['demanda_prevista'] = previsoes
+    else:
+        df_produtos['demanda_prevista'] = previsoes
+        
     return df_produtos, data_atual
 
 
 def gerar_grafico_barras(resultados, data_atual, pasta_graficos):
-    """Gera um gráfico de barras para as previsões de demanda por categoria."""
+    """Gera um gráfico de barras para as previsões de demanda por produto/categoria."""
     plt.figure(figsize=(12, 8))
     
-    # Dados para o gráfico
-    categorias = resultados['categoria']
+    # Dados para o gráfico - removendo referências a nome_produto que não existe na tabela de origem
+    if 'produto_id' in resultados.columns:
+        # Usamos os IDs dos produtos como identificadores
+        produtos = resultados['produto_id']
+        titulo = 'Previsão de Demanda por ID de Produto'
+        xlabel = 'ID do Produto'
+    else:
+        # Caso contrário, usamos categoria
+        produtos = resultados['categoria']
+        titulo = 'Previsão de Demanda por Categoria'
+        xlabel = 'Categoria de Produto'
+    
     demandas = resultados['demanda_prevista']
     precos = resultados['preco_unitario']
     
-    # Cores por categoria
-    cores = {'Eletrônicos': 'blue', 'Roupas': 'red', 'Utensílios': 'green'}
-    cores_barras = [cores.get(cat, 'gray') for cat in categorias]
+    # Cores por categoria (se disponível)
+    cores = {}
+    if 'categoria' in resultados.columns:
+        categorias_unicas = resultados['categoria'].unique()
+        palette = sns.color_palette('viridis', len(categorias_unicas))
+        for i, cat in enumerate(categorias_unicas):
+            cores[cat] = palette[i]
+        
+        cores_barras = [cores.get(resultados['categoria'].iloc[i], 'gray') for i in range(len(resultados))]
+    else:
+        cores_barras = sns.color_palette('viridis', len(resultados))
     
     # Cria o gráfico de barras
-    barras = plt.bar(range(len(categorias)), demandas, color=cores_barras)
+    barras = plt.bar(range(len(produtos)), demandas, color=cores_barras)
     
     # Adiciona rótulos e título
-    plt.title(f'Previsão de Demanda por Categoria - {data_atual}', fontsize=16)
-    plt.xlabel('Categoria de Produto', fontsize=12)
+    plt.title(f'{titulo} - {data_atual}', fontsize=16)
+    plt.xlabel(xlabel, fontsize=12)
     plt.ylabel('Demanda Prevista (unidades)', fontsize=12)
-    plt.xticks(range(len(categorias)), categorias, rotation=45)
+    plt.xticks(range(len(produtos)), produtos, rotation=45)
     
     # Adiciona valores nas barras
     for i, bar in enumerate(barras):
@@ -127,16 +158,17 @@ def gerar_grafico_barras(resultados, data_atual, pasta_graficos):
                 f'R$ {precos.iloc[i]:.2f}', 
                 ha='center', va='top', fontsize=8, color='darkblue')
     
-    # Adiciona uma legenda de cores
-    legend_elements = [Patch(facecolor=cor, label=cat) for cat, cor in cores.items()]
-    plt.legend(handles=legend_elements, title='Categorias', loc='upper right')
+    # Adiciona uma legenda de cores se tivermos categorias
+    if 'categoria' in resultados.columns:
+        legend_elements = [Patch(facecolor=cor, label=cat) for cat, cor in cores.items()]
+        plt.legend(handles=legend_elements, title='Categorias', loc='upper right')
     
     # Ajusta o layout e exibe o grid
     plt.grid(axis='y', linestyle='--', alpha=0.7)
     plt.tight_layout()
     
     # Salva o gráfico
-    nome_arquivo = f'grafico_demanda_categorias_{data_atual.replace("-", "_")}.png'
+    nome_arquivo = f'grafico_demanda_{data_atual.replace("-", "_")}.png'
     caminho_completo = os.path.join(pasta_graficos, nome_arquivo)
     plt.savefig(caminho_completo, dpi=300)
     
@@ -313,13 +345,14 @@ def main():
     pasta_resultados, pasta_graficos = configurar_pasta_saida()
     
     # Carrega o modelo
-    model, model_columns = carregar_modelo()
+    model, model_columns, preprocessor = carregar_modelo()
     if model is None or model_columns is None:
         return
     
-    # Dados para previsão
+    # Dados para previsão - removendo nomes de produtos que não existem na tabela de origem
     novos_produtos = [
         {
+            "produto_id": "101",
             "categoria": "Eletrônicos",
             "preco_unitario": 450.00,
             "promocao": "Sim",
@@ -329,6 +362,7 @@ def main():
             "feedback_cliente": 5
         },
         {
+            "produto_id": "102",
             "categoria": "Roupas",
             "preco_unitario": 89.90,
             "promocao": "Não",
@@ -338,6 +372,7 @@ def main():
             "feedback_cliente": 4
         },
         {
+            "produto_id": "103",
             "categoria": "Utensílios",
             "preco_unitario": 35.50,
             "promocao": "Não",
@@ -348,9 +383,9 @@ def main():
         }
     ]
     
-    print("\n1. PREVISÃO PARA NOVOS PRODUTOS")
+    print("\n1. PREVISÃO PARA PRODUTOS ESPECÍFICOS")
     print("-"*40)
-    resultados, data_atual = prever_novos_produtos(model, model_columns, novos_produtos)
+    resultados, data_atual = prever_novos_produtos(model, model_columns, novos_produtos, preprocessor)
     
     # Exibe e salva os resultados das previsões
     exibir_detalhe_previsoes(resultados, data_atual)
@@ -384,6 +419,14 @@ def main():
     
     print("\n" + "="*80)
     print(f"ANÁLISE COMPLETA FINALIZADA! Todos os resultados estão na pasta: {pasta_resultados}")
+    print("="*80)
+    
+    # Exibe os gráficos (isso abrirá janelas com os gráficos)
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
     print("="*80)
     
     # Exibe os gráficos (isso abrirá janelas com os gráficos)

@@ -3,32 +3,46 @@ import numpy as np
 
 class Predictor:
     """Usa um modelo treinado para fazer novas previsões."""
-    def __init__(self, model, columns):
+    def __init__(self, model, columns, preprocessor=None):
         self.model = model
         self.columns = columns
+        self.preprocessor = preprocessor  # Opcional: para usar os mesmos encoders
 
     def predict_demand(self, new_sale_data):
         """Prevê a demanda para um novo conjunto de dados de venda."""
         # Cria um DataFrame a partir dos novos dados
-        new_sale_df = pd.DataFrame(new_sale_data, index=[0])
+        if isinstance(new_sale_data, dict):
+            new_sale_df = pd.DataFrame([new_sale_data])
+        elif isinstance(new_sale_data, list):
+            new_sale_df = pd.DataFrame(new_sale_data)
+        else:
+            new_sale_df = new_sale_data.copy()
+        
+        # Aplica o preprocessamento se o preprocessor estiver disponível
+        if self.preprocessor:
+            new_sale_df = self.preprocessor.encode_new_data(new_sale_df)
         
         # Processar a coluna 'mes' se ela não existir, mas 'data' existir
         if 'mes' not in new_sale_df.columns and 'data' in new_sale_df.columns:
             try:
-                new_sale_df['mes'] = pd.to_datetime(new_sale_df['data']).dt.month
+                new_sale_df['data'] = pd.to_datetime(new_sale_df['data'])
+                new_sale_df['mes'] = new_sale_df['data'].dt.month
+                # Adicionar outras features temporais consistentes com o treinamento
+                if 'dia' in self.columns:
+                    new_sale_df['dia'] = new_sale_df['data'].dt.day
+                if 'trimestre' in self.columns:
+                    new_sale_df['trimestre'] = new_sale_df['data'].dt.quarter
             except:
                 # Se falhar, use um valor padrão
                 new_sale_df['mes'] = 1
         
-        # Aplica o one-hot encoding nas colunas categóricas
-        if 'categoria' in new_sale_df.columns:
-            new_sale_df = pd.get_dummies(new_sale_df, columns=['categoria'], prefix='categoria')
+        # Lista de possíveis colunas categóricas para one-hot encoding
+        cat_columns = ['categoria', 'promocao', 'dia_da_semana', 'id_produto']
         
-        if 'promocao' in new_sale_df.columns:
-            new_sale_df = pd.get_dummies(new_sale_df, columns=['promocao'], prefix='promocao')
-            
-        if 'dia_da_semana' in new_sale_df.columns:
-            new_sale_df = pd.get_dummies(new_sale_df, columns=['dia_da_semana'], prefix='dia_da_semana')
+        # Aplica o one-hot encoding nas colunas categóricas presentes
+        for col in cat_columns:
+            if col in new_sale_df.columns:
+                new_sale_df = pd.get_dummies(new_sale_df, columns=[col], prefix=col)
         
         # Garante que as colunas do novo dado correspondam exatamente às do modelo treinado
         for col in self.columns:
@@ -62,9 +76,19 @@ class Predictor:
                 new_sale_df[col] = new_sale_df[col].astype(float)
         
         try:
-            prediction = self.model.predict(new_sale_df)
-            return int(max(0, prediction[0]))  # Garantir que é positivo
+            # Realizar a previsão
+            predictions = self.model.predict(new_sale_df)
+            
+            # Se estamos prevendo para múltiplos itens, retornar todos os valores
+            if len(predictions) > 1:
+                return [int(max(0, p)) for p in predictions]  # Garante valores positivos
+            else:
+                return int(max(0, predictions[0]))  # Apenas um valor
+                
         except Exception as e:
             # Em caso de erro, retornar um valor padrão
             print(f"Erro na previsão: {e}")
-            return 10  # Valor padrão em caso de erro
+            if len(new_sale_df) > 1:
+                return [10] * len(new_sale_df)  # Valores padrão para múltiplos itens
+            else:
+                return 10  # Valor padrão em caso de erro
