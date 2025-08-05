@@ -356,7 +356,7 @@ def criar_grafico_recomendacao(resultados, pasta_graficos):
     
     return caminho_grafico
 
-def main():
+def main(caminho_dados_alternativo=None):
     """Função principal que executa o fluxo de previsão de demanda."""
     print("=" * 70)
     print("SISTEMA DE PREVISÃO DE DEMANDA - ShopFast")
@@ -365,8 +365,12 @@ def main():
     # Configurar pastas
     pastas = configurar_pastas()
     
-    # Configurar caminho para o arquivo de dados
-    caminho_dados = os.path.join(pastas['dados'], '2025.1 - Vendas_semestre.txt')
+    # Configurar caminho para o arquivo de dados (com suporte a parâmetro)
+    if caminho_dados_alternativo:
+        caminho_dados = caminho_dados_alternativo
+        print(f"Usando arquivo de dados fornecido: {caminho_dados}")
+    else:
+        caminho_dados = os.path.join(pastas['dados'], '2025.1 - Vendas_semestre.txt')
     
     try:
         # 1. Carregar e processar os dados
@@ -418,5 +422,22 @@ def main():
         except Exception as e2:
             print(f"Não foi possível ler o arquivo para diagnóstico: {str(e2)}")
             
+        # Script para ler o arquivo de texto
+        try:
+            arquivo_entrada = caminho_dados_alternativo if 'caminho_dados_alternativo' in locals() else "C:\\Users\\pedro\\Downloads\\nova-base.txt"
+            with open(arquivo_entrada, "r", encoding='utf-8', errors='ignore') as arquivo:
+                conteudo = arquivo.read()
+                print(conteudo)  # ou processe o conteúdo como necessário
+
+            print(f"Arquivo {arquivo_entrada} processado com sucesso!")
+        except Exception as e3:
+            print(f"Erro ao processar o arquivo de texto: {str(e3)}")
+            
 if __name__ == "__main__":
-    main()
+    # Verificar se foi passado um caminho como argumento de linha de comando
+    if len(sys.argv) > 1:
+        caminho_arquivo = sys.argv[1]
+        print(f"Usando caminho fornecido via linha de comando: {caminho_arquivo}")
+        main(caminho_arquivo)
+    else:
+        main()
