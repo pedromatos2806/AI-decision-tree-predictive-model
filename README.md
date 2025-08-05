@@ -1,31 +1,55 @@
-# Algoritmo de Análise de Demanda
+# Algoritmo de Análise de Demanda - ShopFast
 
 ## Visão Geral
 
-Este algoritmo realiza a previsão de demanda utilizando machine learning com base em dados históricos de vendas e fatores contextuais, recomendando quais produtos devem ser comprados.
+Este algoritmo realiza a previsão de demanda utilizando machine learning com base em dados históricos de vendas e fatores contextuais, recomendando quais produtos devem ser comprados para otimizar o estoque.
+
+## Estrutura do Projeto
+
+```
+IA/
+├── src/
+│   └── shopfast/
+│       ├── data_loader.py         # Carregamento e limpeza de dados
+│       ├── data_preprocessor.py   # Preparação e transformação de dados
+│       ├── model_builder.py       # Construção de diferentes tipos de modelos
+│       ├── model_trainer.py       # Gerenciamento do processo de treinamento
+│       ├── demand_model.py        # Implementação do modelo de previsão
+│       ├── model_evaluator.py     # Avaliação de desempenho do modelo
+│       ├── predictor.py           # Classe para realizar previsões
+│       └── visualization.py       # Visualização dos resultados
+├── main.py                        # Script principal de execução
+├── fazer_previsao.py              # Script para previsão com novos dados
+├── prever_tudo.py                 # Script para previsão em lote
+└── dados/                         # Diretório para arquivos de dados
+```
 
 ## Como Funciona
 
-O algoritmo de previsão de demanda funciona em quatro etapas principais:
+O algoritmo de previsão de demanda funciona em cinco etapas principais:
 
 1. **Processamento de Dados**: Limpa e transforma dados históricos de vendas, incluindo:
-
    - Limpeza (remoção de valores nulos, tratamento de outliers)
    - Análise exploratória para identificar padrões e correlações
    - Engenharia de características (extração de componentes temporais, codificação categórica)
 
 2. **Treinamento do Modelo**: Utiliza machine learning para criar modelo preditivo:
-
    - Divisão em conjuntos de treino e teste
-   - Seleção do algoritmo (Random Forest ou Gradient Boosting)
+   - Seleção do algoritmo (Random Forest, XGBoost ou Gradient Boosting)
    - Ajuste de hiperparâmetros e avaliação de desempenho
 
-3. **Geração de Previsões**: Aplica o modelo para prever demandas futuras:
+3. **Avaliação do Modelo**: Analisa o desempenho do modelo com métricas relevantes:
+   - R² (Coeficiente de determinação)
+   - MAE (Erro médio absoluto)
+   - RMSE (Raiz do erro quadrático médio)
+   - MAPE (Erro percentual absoluto médio)
+
+4. **Geração de Previsões**: Aplica o modelo para prever demandas futuras:
    - Preparação dos dados existentes para previsão
    - Aplicação do modelo treinado
    - Interpretação e formatação dos resultados
 
-4. **Recomendação de Produtos**: Analisa os produtos existentes e recomenda quais comprar:
+5. **Recomendação de Produtos**: Analisa os produtos existentes e recomenda quais comprar:
    - Comparação da demanda prevista com a média histórica
    - Classificação de produtos por prioridade de compra
    - Visualização gráfica das recomendações
@@ -46,99 +70,75 @@ O algoritmo de previsão de demanda funciona em quatro etapas principais:
 
 ```bash
 # Instalar dependências
-pip install -r requirements.txt
+pip install pandas numpy scikit-learn matplotlib seaborn joblib
+# Opcional para melhor desempenho
+pip install xgboost
 ```
 
 ### Execução
 
 ```bash
-# Modo padrão (treinamento e recomendação)
+# Modo completo (treinamento, avaliação e recomendação)
 python main.py
 
-# Modo de treinamento com dados específicos
-python main.py --dados caminho/para/dados.csv
+# Fazer previsões para novos produtos
+python fazer_previsao.py
+
+# Prever demanda para todo o dataset
+python prever_tudo.py
 ```
-
-## Limitações
-
-- Requer dados históricos suficientes para treinamento eficaz
-- Necessita retrainamento periódico para manter precisão
-- Sensível a mudanças bruscas no mercado
 
 ## Detalhes do Algoritmo
 
-### 1. Processamento de Dados
+### Engenharia de Características
 
-O processamento de dados envolve várias etapas críticas:
+O algoritmo realiza transformações sofisticadas nos dados:
 
-- **Limpeza de Dados**: Remoção de entradas duplicadas, preenchimento de valores ausentes e correção de tipos de dados.
-- **Tratamento de Outliers**: Identificação e remoção de valores extremos que podem distorcer a análise.
-- **Análise Exploratória**: Geração de estatísticas descritivas e visualizações para entender a distribuição e relações nos dados.
-
-```python
-def carregar_e_processar_dados(caminho_dados, delimiter=','):
-    """Carrega e processa os dados para treinamento."""
-    print("\n1. Carregando e pré-processando os dados...")
-    data_loader = DataLoader(file_path=caminho_dados, delimiter=delimiter)
-    
-    # Carregar dados com validação de colunas
-    data = data_loader.load_data(required_columns=[...])
-    
-    # Pré-processar dados
-    X_train, X_test, y_train, y_test, product_ids_test = data_loader.preprocess_data()
-    
-    return {...}
-```
-
-### 2. Engenharia de Características
-
-Com base na análise exploratória, o algoritmo cria características relevantes:
-
-- Extração de componentes temporais (mês, dia da semana)
-- Codificação one-hot para variáveis categóricas
+- Extração de features temporais (mês, dia, dia da semana)
+- Codificação cíclica para variáveis sazonais
+- One-hot encoding para variáveis categóricas
 - Normalização de variáveis numéricas
+- Criação de features de interação
 
-### 3. Treinamento do Modelo
+### Modelos Suportados
 
-O algoritmo treina um modelo preditivo usando os dados preparados:
+O sistema suporta múltiplos algoritmos de aprendizado de máquina:
 
-- Divisão em conjuntos de treino e teste
-- Seleção do algoritmo (Random Forest por padrão)
-- Ajuste de hiperparâmetros para otimizar o desempenho
+- Random Forest Regressor
+- Gradient Boosting Regressor
+- Decision Tree Regressor
+- XGBoost (quando disponível)
 
-```python
-def treinar_modelo(dados_processados, model_type="random_forest"):
-    """Treina o modelo de previsão de demanda."""
-    print("\n2. Construindo e treinando o modelo...")
-    model_builder = ModelBuilder(model_type=model_type, max_depth=10, random_state=42)
-    
-    model = model_builder.train(
-        dados_processados['X_train'], 
-        dados_processados['y_train'], 
-        dados_processados['feature_names']
-    )
-    
-    return {...}
-```
+### Visualizações
 
-### 4. Avaliação do Modelo
+O sistema gera visualizações para facilitar a interpretação:
 
-O algoritmo avalia a qualidade do modelo usando:
+- Importância das features
+- Comparação entre valores reais e previstos
+- Distribuição dos erros de previsão
+- Gráficos de recomendações de produtos
 
-- Métricas de erro (MAE, RMSE)
-- Coeficiente de determinação (R²)
-- Análise de resíduos
+## Personalização
 
-### 5. Recomendação de Produtos
+O algoritmo pode ser personalizado de várias maneiras:
 
-O algoritmo analisa os produtos existentes e recomenda quais devem ser comprados:
+1. **Algoritmo de Aprendizado**: Escolher entre diferentes modelos
+2. **Engenharia de Características**: Adicionar ou modificar features
+3. **Hiperparâmetros**: Ajustar parâmetros para otimizar o desempenho
+4. **Estratégia de Recomendação**: Modificar os critérios de priorização
 
-```python
-def recomendar_produtos():
-    """Recomenda produtos para compra com base nas previsões de demanda."""
-    print("\n6. Analisando produtos existentes para recomendações de compra...")
-    
-    # Carregar modelo treinado
+## Limitações Conhecidas
+
+- Depende da qualidade e quantidade dos dados históricos
+- Requer retreinamento periódico para capturar novas tendências
+- Sensível a mudanças bruscas no mercado não refletidas nos dados
+
+## Extensões Futuras
+
+- Implementação de técnicas de deep learning para séries temporais
+- Integração com fontes externas de dados (clima, economia)
+- Interface de usuário para exploração interativa dos resultados
+- Previsão automática e agendada para recomendações contínuas
     model = joblib.load('modelos/modelo_demanda.pkl')
     
     # Carregar e analisar dados históricos
