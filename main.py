@@ -220,6 +220,8 @@ def carregar_e_processar_dados(caminho_dados, delimiter=','):
     }
 
 def treinar_modelo(dados_processados, model_type="xgboost"):
+    print(f"***Algoritmo selecionado: {model_type}***")
+
     """Treina o modelo de previsão de demanda com validação cruzada temporal e otimização."""
     print("\n2. Construindo e treinando o modelo...")
     
