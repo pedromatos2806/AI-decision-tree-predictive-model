@@ -11,15 +11,25 @@ Este documento apresenta uma explicação detalhada do sistema de previsão de d
 O sistema foi estruturado de forma modular, seguindo princípios de engenharia de software para facilitar manutenção e extensibilidade:
 
 ```
-src/shopfast/
-├── data_loader.py         # Carregamento e limpeza de dados
-├── data_preprocessor.py   # Preparação e transformação de dados
-├── model_builder.py       # Construção de diferentes tipos de modelos
-├── model_trainer.py       # Gerenciamento do processo de treinamento
-├── demand_model.py        # Implementação do modelo de previsão
-├── model_evaluator.py     # Avaliação de desempenho do modelo
-├── predictor.py           # Classe para realizar previsões
-└── visualization.py       # Visualização dos resultados
+AI-decision-tree-predictive-model/
+├── src/shopfast/
+│   ├── data_loader.py         # Carregamento e limpeza de dados
+│   ├── data_preprocessor.py   # Preparação e transformação de dados
+│   ├── model_builder.py       # Construção de diferentes tipos de modelos
+│   ├── model_trainer.py       # Gerenciamento do processo de treinamento
+│   ├── demand_model.py        # Implementação do modelo de previsão
+│   ├── model_evaluator.py     # Avaliação de desempenho do modelo
+│   ├── predictor.py           # Classe para realizar previsões
+│   └── visualization.py       # Visualização dos resultados
+├── main.py                    # Script principal de execução
+├── fazer_previsao.py          # Script para previsão com novos dados
+├── prever_tudo.py             # Script para previsão em lote
+├── recomendar_produtos.py     # Script para recomendação de produtos
+├── modelos/                   # Diretório para modelos treinados
+├── dados/                     # Diretório para arquivos de dados
+└── resultados/                # Diretório para armazenar resultados
+    └── YYYY_MM_DD/            # Pastas organizadas por data
+        └── graficos/          # Visualizações geradas pelo sistema
 ```
 
 ## Técnicas de Machine Learning Aplicadas
@@ -30,25 +40,51 @@ O pré-processamento de dados é fundamental para o sucesso do modelo de machine
 
 #### Limpeza de Dados
 - **Tratamento de valores ausentes**: Implementado na classe `DataLoader` e `DataPreprocessor`
-- **Detecção e tratamento de outliers**: Utilizamos limites baseados em quartis
+- **Detecção e tratamento de outliers**: Utilizamos limites baseados em quartis (percentis 1% e 99%)
 - **Normalização de formatos de data**: Conversão para formato datetime padrão
+- **Remoção de dados inválidos**: Filtragem de linhas com valores inconsistentes
+
+```python
+# Tratamento de outliers implementado no main.py
+target_column = 'quantidade_vendida'
+q1 = data[target_column].quantile(0.01)
+q3 = data[target_column].quantile(0.99)
+iqr = q3 - q1
+lower_bound = q1 - 1.5 * iqr
+upper_bound = q3 + 1.5 * iqr
+outliers_mask = (data[target_column] < lower_bound) | (data[target_column] > upper_bound)
+print(f"     Outliers encontrados: {outliers_mask.sum()} ({outliers_mask.sum()/len(data)*100:.2f}%)")
+
+# Opção 1: Remover outliers (para conjuntos grandes)
+if len(data) > 1000:
+    data_cleaned = data[~outliers_mask].copy()
+# Opção 2: Limitar valores (para conjuntos menores)
+else:
+    data_cleaned = data.copy()
+    data_cleaned.loc[data_cleaned[target_column] < lower_bound, target_column] = lower_bound
+    data_cleaned.loc[data_cleaned[target_column] > upper_bound, target_column] = upper_bound
+```
 
 #### Engenharia de Características (Feature Engineering)
-- **Extração de componentes temporais**: A partir das datas, extraímos mês, dia, semana do ano
+- **Extração de componentes temporais**: A partir das datas, extraímos mês, dia, semana do ano, dia do ano, trimestre
 - **Variáveis cíclicas**: Transformação de variáveis temporais em representações cíclicas (seno/cosseno)
 - **Features de interação**: Combinação de variáveis relacionadas (ex: temperatura × umidade)
 - **Agregações estatísticas**: Cálculo de médias, medianas e desvios por produto e categoria
+- **Identificação de dias especiais**: Detecção de fins de semana e feriados
 
 ```python
 # Exemplo da engenharia de características temporal
-data_cleaned['mes'] = data_cleaned['data'].dt.month
-data_cleaned['dia'] = data_cleaned['data'].dt.day
-data_cleaned['semana_do_ano'] = data_cleaned['data'].dt.isocalendar().week
-data_cleaned['dia_do_ano'] = data_cleaned['data'].dt.dayofyear
+dados['mes'] = dados['data'].dt.month
+dados['dia'] = dados['data'].dt.day
+dados['ano'] = dados['data'].dt.year
+dados['semana_do_ano'] = dados['data'].dt.isocalendar().week
+dados['dia_do_ano'] = dados['data'].dt.dayofyear
+dados['trimestre'] = dados['data'].dt.quarter
+dados['e_fim_de_semana'] = dados['dia_da_semana'].isin([5, 6, 'Sábado', 'Domingo', 'Saturday', 'Sunday']).astype(int)
 
 # Codificação cíclica para variáveis sazonais
-data_cleaned['mes_sin'] = np.sin(2 * np.pi * data_cleaned['mes']/12)
-data_cleaned['mes_cos'] = np.cos(2 * np.pi * data_cleaned['mes']/12)
+dados['mes_sin'] = np.sin(2 * np.pi * dados['mes']/12)
+dados['mes_cos'] = np.cos(2 * np.pi * dados['mes']/12)
 ```
 
 #### Normalização e Codificação
@@ -63,32 +99,54 @@ Implementamos uma abordagem flexível que permite utilizar diferentes algoritmos
 #### Modelos Implementados
 1. **Random Forest Regressor**: Conjunto de árvores de decisão que combinam suas previsões
 2. **Gradient Boosting Regressor**: Técnica de boosting que constrói modelos sequencialmente
-3. **XGBoost Regressor**: Implementação otimizada de gradient boosting com regularização
+3. **XGBoost Regressor**: Implementação otimizada de gradient boosting com regularização (opcional)
 4. **Decision Tree Regressor**: Modelo base mais simples para comparação
 
-A seleção do modelo é feita na classe `ModelBuilder` e pode ser especificada como parâmetro:
+A seleção do modelo é feita na classe `DemandPredictionModel` e pode ser especificada como parâmetro:
 
 ```python
-def _initialize_model(self):
-    """Inicializa o modelo de acordo com o tipo especificado."""
-    if self.model_type == "decision_tree":
-        self.model = DecisionTreeRegressor(
-            max_depth=self.max_depth, 
-            random_state=self.random_state
-        )
-    elif self.model_type == "random_forest":
+def __init__(self, model_type="random_forest", max_depth=10, random_state=42):
+    self.model_type = model_type
+    self.random_state = random_state
+    
+    # Seleção do modelo com base no tipo especificado
+    if model_type == "decision_tree":
+        self.model = DecisionTreeRegressor(max_depth=max_depth, random_state=random_state)
+    elif model_type == "random_forest":
         self.model = RandomForestRegressor(
             n_estimators=100, 
-            max_depth=self.max_depth,
-            random_state=self.random_state
+            max_depth=max_depth,
+            random_state=random_state
         )
-    elif self.model_type == "gradient_boosting":
+    elif model_type == "gradient_boosting":
         self.model = GradientBoostingRegressor(
             n_estimators=100,
             learning_rate=0.1,
-            max_depth=self.max_depth,
-            random_state=self.random_state
+            max_depth=max_depth,
+            random_state=random_state
         )
+    else:
+        print(f"Tipo de modelo '{model_type}' não reconhecido. Usando Random Forest.")
+        self.model = RandomForestRegressor(
+            n_estimators=100, 
+            max_depth=max_depth,
+            random_state=random_state
+        )
+        
+    print(f"Modelo inicializado: {type(self.model).__name__}")
+```
+
+O script principal também tenta carregar o XGBoost, se disponível:
+
+```python
+# Tentar importar XGBoost - tornar opcional
+try:
+    import xgboost as xgb
+    XGBOOST_AVAILABLE = True
+except ImportError:
+    print("AVISO: Biblioteca XGBoost não encontrada. Usando RandomForest como alternativa.")
+    print("Para instalar XGBoost, execute: pip install xgboost")
+    XGBOOST_AVAILABLE = False
 ```
 
 #### Otimização de Hiperparâmetros
@@ -237,28 +295,118 @@ def plot_error_distribution(self, y_test, y_pred, figsize=(10, 6)):
 Implementamos uma classe dedicada (`Predictor`) para fazer novas previsões com o modelo treinado, garantindo que todas as transformações de dados sejam aplicadas consistentemente:
 
 ```python
-def predict_demand(self, new_sale_data):
-    """Prevê a demanda para um novo conjunto de dados de venda."""
-    # Cria um DataFrame a partir dos novos dados
-    if isinstance(new_sale_data, dict):
-        new_sale_df = pd.DataFrame([new_sale_data])
-    elif isinstance(new_sale_data, list):
-        new_sale_df = pd.DataFrame(new_sale_data)
-    else:
-        new_sale_df = new_sale_data.copy()
+class Predictor:
+    """Usa um modelo treinado para fazer novas previsões."""
+    def __init__(self, model, columns, preprocessor=None):
+        self.model = model
+        self.columns = columns
+        self.preprocessor = preprocessor  # Opcional: para usar os mesmos encoders
+
+    def predict_demand(self, new_sale_data):
+        """Prevê a demanda para um novo conjunto de dados de venda."""
+        # Cria um DataFrame a partir dos novos dados
+        if isinstance(new_sale_data, dict):
+            new_sale_df = pd.DataFrame([new_sale_data])
+        elif isinstance(new_sale_data, list):
+            new_sale_df = pd.DataFrame(new_sale_data)
+        else:
+            new_sale_df = new_sale_data.copy()
+        
+        # Aplica o preprocessamento se o preprocessor estiver disponível
+        if self.preprocessor:
+            new_sale_df = self.preprocessor.encode_new_data(new_sale_df)
+        
+        # Processar a coluna 'mes' se ela não existir, mas 'data' existir
+        if 'mes' not in new_sale_df.columns and 'data' in new_sale_df.columns:
+            try:
+                new_sale_df['data'] = pd.to_datetime(new_sale_df['data'])
+                new_sale_df['mes'] = new_sale_df['data'].dt.month
+                # Adicionar outras features temporais consistentes com o treinamento
+                if 'dia' in self.columns:
+                    new_sale_df['dia'] = new_sale_df['data'].dt.day
+                if 'trimestre' in self.columns:
+                    new_sale_df['trimestre'] = new_sale_df['data'].dt.quarter
+            except:
+                # Se falhar, use um valor padrão
+                new_sale_df['mes'] = 1
+```
+
+Além disso, criamos um script dedicado (`fazer_previsao.py`) para facilitar a previsão com novos dados:
+
+```python
+def carregar_modelo_e_prever(dados_para_prever, usar_data_atual=False):
+    """
+    Carrega o modelo treinado e as colunas, e faz a previsão para novos dados.
     
-    # Processar a coluna 'mes' se ela não existir, mas 'data' existir
-    if 'mes' not in new_sale_df.columns and 'data' in new_sale_df.columns:
-        try:
-            new_sale_df['data'] = pd.to_datetime(new_sale_df['data'])
-            new_sale_df['mes'] = new_sale_df['data'].dt.month
+    Args:
+        dados_para_prever: Lista de dicionários com os dados para previsão
+        usar_data_atual: Se True, substitui a data em todos os registros pela data atual
+    """
+    try:
+        # Carrega o modelo e as colunas dos arquivos salvos
+        model = joblib.load('modelo_demanda.pkl')
+        model_columns = joblib.load('colunas_modelo.pkl')
+        print("Modelo 'modelo_demanda.pkl' carregado com sucesso.")
+    except FileNotFoundError:
+        print("ERRO: Arquivos de modelo não encontrados. Rode o script 'main.py' primeiro para treinar e salvar o modelo.")
+        return
+
+    # Converte os novos dados para um DataFrame do pandas
+    df_novos_dados = pd.DataFrame(dados_para_prever)
+    
+    # Se solicitado, substitui a data pela data atual
+    if usar_data_atual:
+        data_atual = datetime.datetime.now().strftime('%Y-%m-%d')
+        df_novos_dados['data'] = data_atual
+        print(f"Usando data atual para previsão: {data_atual}")
 ```
 
 ### 6. Sistema de Recomendação de Produtos
 
-Desenvolvemos um algoritmo que vai além da simples previsão, gerando recomendações de compra:
+Desenvolvemos um algoritmo dedicado (`recomendar_produtos.py`) que vai além da simples previsão, gerando recomendações de compra baseadas na análise de tendências e preços:
 
 ```python
+def recomendar_produtos():
+    """Recomenda produtos para compra com base nas previsões de demanda para produtos existentes."""
+    print("\n6. Analisando produtos existentes para recomendações de compra...")
+    
+    # Carregar modelo e metadados
+    try:
+        # Verificar se modelo existe
+        modelo_path = 'modelos/modelo_demanda.pkl'
+        colunas_path = 'modelos/colunas_modelo.pkl'
+        
+        if not os.path.exists(modelo_path) or not os.path.exists(colunas_path):
+            print(f"Modelo ou colunas não encontrados. Execute o treinamento primeiro.")
+            return None
+        
+        # Carregar modelo e feature names    
+        model = joblib.load(modelo_path)
+        feature_names = joblib.load(colunas_path)
+        
+        # Carregar dados originais
+        caminho_dados = os.path.join('dados', '2025.1 - Vendas_semestre.txt')
+        dados = pd.read_csv(caminho_dados, sep=',')
+```
+
+O sistema de recomendação inclui vários cálculos estatísticos e análises de tendências para determinar quais produtos devem ser priorizados:
+
+```python
+# Calcular estatísticas agregadas por produto
+produtos_stats = dados.groupby('produto_id').agg({
+    'quantidade_vendida': ['mean', 'median', 'std', 'sum', 'count'],
+    'preco_unitario': 'mean',
+    'temperatura_media': 'mean',
+    'humidade_media': 'mean'
+}).reset_index()
+
+# Renomear colunas
+produtos_stats.columns = [
+    'produto_id', 'venda_media', 'venda_mediana', 
+    'venda_desvio', 'venda_total', 'qtd_registros',
+    'preco_medio', 'temperatura_media', 'humidade_media'
+]
+
 # Calcular índice de prioridade (demanda prevista / preço)
 resultados['prioridade_compra'] = resultados['demanda_prevista'] / resultados['preco_unitario']
 
@@ -266,6 +414,21 @@ resultados['prioridade_compra'] = resultados['demanda_prevista'] / resultados['p
 resultados['recomendacao'] = 'Normal'
 resultados.loc[resultados['demanda_prevista'] > resultados['venda_media'] * 1.2, 'recomendacao'] = 'Alta'
 resultados.loc[resultados['demanda_prevista'] < resultados['venda_media'] * 0.8, 'recomendacao'] = 'Baixa'
+```
+
+As recomendações são então visualizadas graficamente para facilitar a tomada de decisão:
+
+```python
+# Criar gráfico de barras coloridas por recomendação
+plt.figure(figsize=(15, 8))
+cores = {'Alta': 'green', 'Normal': 'blue', 'Baixa': 'red'}
+ax = sns.barplot(
+    data=resultados.sort_values('prioridade_compra', ascending=False).head(20),
+    x='produto_id', 
+    y='prioridade_compra',
+    hue='recomendacao',
+    palette=cores
+)
 ```
 
 ## Processo de Desenvolvimento e Validação
@@ -288,6 +451,32 @@ Realizamos validação cruzada temporal com 5 folds e obtivemos:
 - **MAPE**: 12%-18%
 
 Estes resultados indicam um bom desempenho do modelo, especialmente considerando a natureza complexa da previsão de demanda.
+
+Além disso, implementamos análise de erro por faixa de valores, permitindo identificar em quais faixas de demanda o modelo tem melhor ou pior desempenho:
+
+```python
+# Criar faixas de valores
+bins = [0, 5, 10, 20, 50, 100, float('inf')]
+labels = ['0-5', '6-10', '11-20', '21-50', '51-100', '100+']
+
+# Atribuir cada valor a uma faixa
+y_test_binned = pd.cut(y_test, bins=bins, labels=labels)
+
+# Calcular métricas por faixa
+metrics_by_range = {}
+for label in labels:
+    mask = (y_test_binned == label)
+    if mask.sum() > 0:
+        range_mae = mean_absolute_error(y_test[mask], y_pred[mask])
+        range_rmse = np.sqrt(mean_squared_error(y_test[mask], y_pred[mask]))
+        range_mape = np.mean(np.abs((y_test[mask] - y_pred[mask]) / np.maximum(y_test[mask], 0.01))) * 100
+        metrics_by_range[label] = {
+            'count': mask.sum(),
+            'mae': range_mae,
+            'rmse': range_rmse,
+            'mape': range_mape
+        }
+```
 
 ## Exemplo de Uso
 
@@ -358,6 +547,42 @@ resultados = carregar_modelo_e_prever(novos_produtos)
 3. **Feature selection automatizada**: Implementar métodos para seleção de características mais relevantes
 4. **Ensemble de modelos**: Combinar múltiplos algoritmos para melhorar a precisão
 
+## Organização de Arquivos e Estrutura de Pastas
+
+O sistema foi projetado para organizar os resultados e artefatos gerados de forma estruturada:
+
+```python
+def configurar_pastas():
+    """Configura e cria as pastas necessárias para o projeto."""
+    # Diretório base
+    pasta_base = os.path.dirname(os.path.abspath(__file__))
+    
+    # Pasta para dados
+    pasta_dados = os.path.join(pasta_base, 'dados')
+    if not os.path.exists(pasta_dados):
+        os.makedirs(pasta_dados)
+        
+    # Pasta para resultados
+    data_hoje = datetime.datetime.now().strftime('%Y_%m_%d')
+    pasta_resultados = os.path.join(pasta_base, 'resultados')
+    if not os.path.exists(pasta_resultados):
+        os.makedirs(pasta_resultados)
+    
+    pasta_data = os.path.join(pasta_resultados, data_hoje)
+    if not os.path.exists(pasta_data):
+        os.makedirs(pasta_data)
+    
+    pasta_graficos = os.path.join(pasta_data, 'graficos')
+    if not os.path.exists(pasta_graficos):
+        os.makedirs(pasta_graficos)
+        
+    pasta_modelos = os.path.join(pasta_base, 'modelos')
+    if not os.path.exists(pasta_modelos):
+        os.makedirs(pasta_modelos)
+```
+
+Essa abordagem garante que resultados de diferentes execuções sejam armazenados separadamente, facilitando o acompanhamento da evolução do modelo ao longo do tempo.
+
 ## Impacto e Aplicações Práticas
 
 O sistema desenvolvido tem aplicações diretas no planejamento de estoque e compras:
@@ -366,9 +591,12 @@ O sistema desenvolvido tem aplicações diretas no planejamento de estoque e com
 2. **Melhoria no atendimento**: Garantindo disponibilidade dos produtos mais demandados
 3. **Otimização logística**: Planejamento antecipado baseado em previsões confiáveis
 4. **Suporte a decisões**: Recomendações baseadas em dados para equipe de compras
+5. **Priorização inteligente**: Índice de prioridade baseado na relação demanda/preço
 
 ## Considerações Finais
 
 Este projeto demonstra a aplicação prática de técnicas avançadas de machine learning em um problema real de negócio. O sistema não apenas realiza previsões precisas, mas também traduz essas previsões em recomendações acionáveis.
 
 A abordagem baseada em componentes modulares permite que o sistema seja facilmente adaptado para outros contextos e conjuntos de dados, demonstrando a versatilidade das técnicas de IA implementadas.
+
+A arquitetura atual suporta múltiplos algoritmos de aprendizado de máquina e permite a integração com fontes externas de dados, possibilitando a evolução contínua do sistema para atender às necessidades em constante mudança do negócio.
