@@ -1,0 +1,16 @@
+# Ignorar o ambiente virtual do Python
+venv/
+
+# Ignorar pastas de saída geradas pelo script
+modelos/
+
+# Ignorar arquivos de modelo que possam ter sido salvos na raiz
+*.pkl
+
+# Ignorar cache e arquivos compilados do Python
+__pycache__/
+*.pyc
+
+# Ignorar arquivos de configuração de IDEs e editores (boa prática)
+.vscode/
+.idea/
