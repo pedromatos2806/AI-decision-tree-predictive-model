@@ -1,3 +1,9 @@
+import os
+import pandas as pd
+import numpy as np
+import joblib
+from sklearn.preprocessing import StandardScaler
+
 def recomendar_produtos():
     """Recomenda produtos para compra com base nas previsões de demanda para produtos existentes."""
     print("\n6. Analisando produtos existentes para recomendações de compra...")
@@ -159,10 +165,10 @@ def recomendar_produtos():
         resultados.loc[resultados['demanda_prevista'] < resultados['venda_media'] * 0.8, 'recomendacao'] = 'Baixa'
         
         # Exibir resultados
-        print("\nRecomendações de Produtos para Compra (Top 10 por demanda prevista):")
+        print("\nRecomendações de Produtos para Compra (Todos os produtos por demanda prevista):")
         cols_exibir = ['produto_id', 'categoria', 'preco_unitario', 'venda_media', 
                        'demanda_prevista', 'recomendacao']
-        print(resultados[cols_exibir].head(10).to_string(index=False))
+        print(resultados[cols_exibir].to_string(index=False))
         
         return resultados
     
@@ -174,3 +180,6 @@ def recomendar_produtos():
         import traceback
         traceback.print_exc()
         return None
+
+if __name__ == "__main__":
+    recomendar_produtos()

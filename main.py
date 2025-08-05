@@ -641,10 +641,10 @@ def recomendar_produtos():
         resultados.loc[resultados['demanda_prevista'] < resultados['venda_media'] * 0.8, 'recomendacao'] = 'Baixa'
         
         # Exibir resultados
-        print("\nRecomendações de Produtos para Compra (Top 10 por demanda prevista):")
+        print("\nRecomendações de Produtos para Compra (Todos os produtos por demanda prevista):")
         cols_exibir = ['produto_id', 'categoria', 'preco_unitario', 'venda_media', 
                        'demanda_prevista', 'recomendacao']
-        print(resultados[cols_exibir].head(10).to_string(index=False))
+        print(resultados[cols_exibir].to_string(index=False))
         
         return resultados
     
@@ -662,8 +662,8 @@ def criar_grafico_recomendacao(resultados, pasta_graficos):
     if resultados is None:
         return
     
-    # Selecionar os top 15 produtos para o gráfico
-    top_produtos = resultados.head(15)
+    # Usar todos os produtos para o gráfico
+    top_produtos = resultados
     
     plt.figure(figsize=(12, 8))
     
